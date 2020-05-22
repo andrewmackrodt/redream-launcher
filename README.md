@@ -1,6 +1,6 @@
 # redream-launcher
 
-*nix script to install the latest redream version to `~/.redream`. The script
+*nix script to install the latest redream version to `~/redream`. The script
 can be run on demand to update to the latest version and will preserve existing
 configurations, saves etc.
 
@@ -10,5 +10,5 @@ be created for Linux users as long as `~/.local/share/applications` exists.
 
 ## Usage
 ```sh
-curl -sSL https://raw.githubusercontent.com/andrewmackrodt/redream-launcher/master/redream-latest | bash
+curl -sSL https://raw.githubusercontent.com/andrewmackrodt/redream-launcher/master/redream | bash
 ```

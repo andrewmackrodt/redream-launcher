@@ -1,6 +1,13 @@
 #!/bin/bash
 
-BASE_PATH=$HOME/.redream
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+# source environment file if exists
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+	. "$SCRIPT_DIR/.env"
+fi
+
+REDREAM_DIR=${REDREAM_DIR:-$HOME/redream}
 
 if uname | grep -q Darwin; then
 	PLATFORM="mac"
@@ -13,24 +20,24 @@ else
 fi
 
 get_latest_url() {
-local REDREAM_BASE_URL="https://redream.io"
+	local REDREAM_BASE_URL="https://redream.io"
 
-wget -qO- \
-	--save-cookies /tmp/redream-cookie.txt \
-	--keep-session-cookies \
-	"$REDREAM_BASE_URL/register" >/dev/null
+	wget -qO- \
+		--save-cookies /tmp/redream-cookie.txt \
+		--keep-session-cookies \
+		"$REDREAM_BASE_URL/register" >/dev/null
 
-wget -qO /tmp/redream-download.html \
-	--header "Referrer: $REDREAM_BASE_URL/register" \
-	--max-redirect 0 \
-	--load-cookies /tmp/redream-cookie.txt \
-	"$REDREAM_BASE_URL/download"
+	wget -qO /tmp/redream-download.html \
+		--header "Referrer: $REDREAM_BASE_URL/register" \
+		--max-redirect 0 \
+		--load-cookies /tmp/redream-cookie.txt \
+		"$REDREAM_BASE_URL/download"
 
-local links=$( \
-	grep -E 'href="([^"]*redream.x86_64-'$PLATFORM'[^"]+)' /tmp/redream-download.html \
-		| sed -E 's/.*href="([^"]*redream.x86_64-'$PLATFORM'[^"]+)".*/\1/g' \
-		| uniq \
-	)
+	local links=$( \
+		grep -E 'href="([^"]*redream.x86_64-'$PLATFORM'[^"]+)' /tmp/redream-download.html \
+			| sed -E 's/.*href="([^"]*redream.x86_64-'$PLATFORM'[^"]+)".*/\1/g' \
+			| uniq \
+		)
 
 	rm /tmp/redream-cookie.txt /tmp/redream-download.html
 	
@@ -71,8 +78,8 @@ extract() {
 link_release() {
 	echo -n "Creating hardlink to the latest release ... "
 
-	if [[ -f "$BASE_PATH/redream" ]]; then
-		rm -f "$BASE_PATH/redream"
+	if [[ -f "$REDREAM_DIR/redream" ]]; then
+		rm -f "$REDREAM_DIR/redream"
 	fi
 
 	cd "$RELEASE_PATH/$(dirname "$APP_PATH")"
@@ -93,7 +100,7 @@ create_macos_application() {
 		return
 	fi
 	mkdir -p ~/Applications/redream.app/Contents/{MacOS,Resources}
-	echo -e "#!/bin/sh\nexec $BASE_PATH/redream "$@ > ~/Applications/redream.app/Contents/MacOS/redream
+	echo -e "#!/bin/sh\nexec $REDREAM_DIR/redream "$@ > ~/Applications/redream.app/Contents/MacOS/redream
 	chmod +x ~/Applications/redream.app/Contents/MacOS/redream
 	chmod +x ~/Applications/redream.app
 	cp "$RELEASE_PATH/redream.app/Contents/Resources/icon.icns" ~/Applications/redream.app/Contents/Resources
@@ -111,14 +118,14 @@ create_linux_desktop_launcher() {
 		echo "ERR ... DIR NOT FOUND ~/.local/share/applications"
 		return
 	fi
-	wget -qO "$BASE_PATH/redream.png" https://raw.githubusercontent.com/andrewmackrodt/redream-launcher/master/redream.png
+	wget -qO "$REDREAM_DIR/redream.png" https://raw.githubusercontent.com/andrewmackrodt/redream-launcher/master/redream.png
 	cat <<EOF > ~/.local/share/applications/redream.desktop
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=redream
-Icon=$HOME/.redream/redream.png
-Exec=$HOME/.redream/redream
+Icon=$REDREAM_DIR/redream.png
+Exec=$REDREAM_DIR/redream
 Categories=Games;
 Terminal=false
 EOF
@@ -129,9 +136,9 @@ EOF
 LATEST_URL=$(get_latest_url)
 
 # download and extract
-DOWNLOAD_PATH="$BASE_PATH/cache/$(basename "$LATEST_URL")"
+DOWNLOAD_PATH="$REDREAM_DIR/releases/$(basename "$LATEST_URL")"
 download "$LATEST_URL" "$DOWNLOAD_PATH"
-RELEASE_PATH="$BASE_PATH/releases/$(basename "$LATEST_URL" | sed -E 's/.+-(v.+)\.tar\.gz/\1/')"
+RELEASE_PATH="$REDREAM_DIR/releases/$(basename "$LATEST_URL" | sed -E 's/.+-(v.+)\.tar\.gz/\1/')"
 extract "$DOWNLOAD_PATH" "$RELEASE_PATH"
 
 # check for existance of redream binary
@@ -146,7 +153,7 @@ link_release
 if [[ "$PLATFORM" == "mac" ]]; then
 	create_macos_application
 elif [[ "$PLATFORM" == "linux" ]]; then
-  create_linux_desktop_launcher
+	create_linux_desktop_launcher
 fi
 
-exec "$BASE_PATH/redream"
+exec "$REDREAM_DIR/redream"
