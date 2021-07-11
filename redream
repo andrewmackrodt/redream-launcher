@@ -9,7 +9,11 @@ fi
 
 REDREAM_DIR=${REDREAM_DIR:-$HOME/redream}
 
-if uname | grep -q Darwin; then
+if uname | grep -q MSYS; then
+	PLATFORM="windows"
+	APP_PATH="redream"
+	LINK_TARGET="..\.."
+elif uname | grep -q Darwin; then
 	PLATFORM="mac"
 	APP_PATH="redream.app/Contents/MacOS/redream"
 	LINK_TARGET="../../../../.."
@@ -22,16 +26,7 @@ fi
 get_latest_url() {
 	local REDREAM_BASE_URL="https://redream.io"
 
-	wget -qO- \
-		--save-cookies /tmp/redream-cookie.txt \
-		--keep-session-cookies \
-		"$REDREAM_BASE_URL/register" >/dev/null
-
-	wget -qO /tmp/redream-download.html \
-		--header "Referrer: $REDREAM_BASE_URL/register" \
-		--max-redirect 0 \
-		--load-cookies /tmp/redream-cookie.txt \
-		"$REDREAM_BASE_URL/download"
+	curl -Sso /tmp/redream-download.html "$REDREAM_BASE_URL/download"
 
 	local links=$( \
 		grep -E 'href="([^"]*redream.x86_64-'$PLATFORM'[^"]+)' /tmp/redream-download.html \
@@ -39,7 +34,7 @@ get_latest_url() {
 			| uniq \
 		)
 
-	rm /tmp/redream-cookie.txt /tmp/redream-download.html
+	rm /tmp/redream-download.html
 	
 	local latest=$(echo "$links" | sort -rV | head -n1)
 	echo "${REDREAM_BASE_URL}${latest}"
@@ -51,7 +46,7 @@ download() {
 		echo "SKIP"
 	else
 		mkdir -p "$(dirname "$2")"
-		if wget -qO "$2" "$1"; then
+		if curl -Sso "$2" "$1"; then
 			echo "OK"
 		else
 			rm -f "$2"
@@ -66,11 +61,20 @@ extract() {
 		echo "SKIP"
 	else
 		mkdir -p "$2"
-		if tar xf "$1" -C "$2"; then
-			echo "OK"
+		if [[ "$PLATFORM" == "windows" ]]; then
+			if unzip -q "$1" -d "$2"; then
+				echo "OK"
+			else
+				rmdir "$2"
+				echo "ERROR"
+			fi
 		else
-			rmdir "$2"
-			echo "ERROR"
+			if tar xf "$1" -C "$2"; then
+				echo "OK"
+			else
+				rmdir "$2"
+				echo "ERROR"
+			fi
 		fi
 	fi
 }
@@ -84,13 +88,21 @@ link_release() {
 
 	cd "$RELEASE_PATH/$(dirname "$APP_PATH")"
 
-	if echo "$(basename "$APP_PATH")" | cpio -p -al "$LINK_TARGET"; then
-		echo "OK"
+	if [[ "$PLATFORM" == "windows" ]]; then
+		if cmd.exe /c "mklink /h "'"'$LINK_TARGET\\redream.exe'"'" redream.exe" >/dev/null; then
+			echo "OK"
+		else
+			echo "ERROR"
+		fi
 	else
-		echo "ERROR"
+		if echo "$(basename "$APP_PATH")" | cpio -p -al "$LINK_TARGET"; then
+			echo "OK"
+		else
+			echo "ERROR"
+		fi
 	fi
 
-	cd -
+	cd - >/dev/null
 }
 
 create_macos_application() {
@@ -138,7 +150,7 @@ LATEST_URL=$(get_latest_url)
 # download and extract
 DOWNLOAD_PATH="$REDREAM_DIR/releases/$(basename "$LATEST_URL")"
 download "$LATEST_URL" "$DOWNLOAD_PATH"
-RELEASE_PATH="$REDREAM_DIR/releases/$(basename "$LATEST_URL" | sed -E 's/.+-(v.+)\.tar\.gz/\1/')"
+RELEASE_PATH="$REDREAM_DIR/releases/$(basename "$LATEST_URL" | sed -E 's/.+-(v.+)\.(tar\.gz|zip)/\1/')"
 extract "$DOWNLOAD_PATH" "$RELEASE_PATH"
 
 # check for existance of redream binary
