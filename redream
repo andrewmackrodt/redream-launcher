@@ -13,14 +13,32 @@ if uname | grep -q MSYS; then
 	PLATFORM="windows"
 	APP_PATH="redream"
 	LINK_TARGET="..\.."
+	REDREAM_ARCH="x86_64"
 elif uname | grep -q Darwin; then
 	PLATFORM="mac"
 	APP_PATH="redream.app/Contents/MacOS/redream"
 	LINK_TARGET="../../../../.."
-else
+	REDREAM_ARCH="x86_64"
+elif uname | grep -q Linux; then
 	PLATFORM="linux"
 	APP_PATH="redream"
 	LINK_TARGET="../.."
+	case "uname -m" in #https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
+		"x86_64")
+			REDREAM_ARCH="x86_64"
+		;;
+		"aarch64"|"aarch64_be"|"armv8l"|"arm"|"armv7l")
+			REDREAM_ARCH="universal-raspberry"
+		;;
+		*)
+			echo "ERROR not running on a supported architecture"
+			#exit 1
+		;;
+	esac
+	
+else
+	echo "ERROR could not determine OS"
+	exit 1
 fi
 
 get_latest_url() {
@@ -29,8 +47,8 @@ get_latest_url() {
 	curl -Sso /tmp/redream-download.html "$REDREAM_BASE_URL/download"
 
 	local links=$( \
-		grep -E 'href="([^"]*redream.x86_64-'$PLATFORM'[^"]+)' /tmp/redream-download.html \
-			| sed -E 's/.*href="([^"]*redream.x86_64-'$PLATFORM'[^"]+)".*/\1/g' \
+		grep -E 'href="([^"]*redream.'$REDREAM_ARCH'-'$PLATFORM'[^"]+)' /tmp/redream-download.html \
+			| sed -E 's/.*href="([^"]*redream.'$REDREAM_ARCH'-'$PLATFORM'[^"]+)".*/\1/g' \
 			| uniq \
 		)
 
