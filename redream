@@ -186,6 +186,9 @@ if [[ "$PLATFORM" == "mac" ]]; then
 	create_macos_application
 elif [[ "$PLATFORM" == "linux" ]]; then
 	create_linux_desktop_launcher
+	if [[ "$REDREAM_ARCH" == "universal-raspberry" ]]; then
+		cp $REDREAM_DIR/releases/v*/redream.*.elf $REDREAM_DIR #required fix since the 'redream' binary the desktop uses can't find these files
+	fi
 fi
 
 if [[ $run_after_install != "no-run" ]]; then
