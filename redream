@@ -1,6 +1,6 @@
 #!/bin/bash
 
-run_after_install=$1
+launch_args=$@
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
@@ -29,8 +29,13 @@ elif uname | grep -q Linux; then
 		"x86_64")
 			REDREAM_ARCH="x86_64"
 		;;
-		"aarch64"|"aarch64_be"|"armv8l"|"arm"|"armv7l")
+		"aarch64"|"aarch64_be"|"armv8l")
 			REDREAM_ARCH="universal-raspberry"
+			REDREAM_ARM_TYPE="64"
+		;;
+		"arm"|"armv7l"
+			REDREAM_ARCH="universal-raspberry"
+			REDREAM_ARM_TYPE="32"
 		;;
 		*)
 			echo "ERROR not running on a supported architecture"
@@ -187,10 +192,17 @@ if [[ "$PLATFORM" == "mac" ]]; then
 elif [[ "$PLATFORM" == "linux" ]]; then
 	create_linux_desktop_launcher
 	if [[ "$REDREAM_ARCH" == "universal-raspberry" ]]; then
-		cp $REDREAM_DIR/releases/v*/redream.*.elf $REDREAM_DIR #required fix since the 'redream' binary the desktop uses can't find these files
+		if [[ $launch_args == *"system-mesa"* ]]; then
+			#exec "$REDREAM_DIR/redream"
+			echo "Using the system library over the bundled one..."
+			cp $REDREAM_DIR/releases/v*/redream.$REDREAM_ARM_TYPE.elf $REDREAM_DIR/redream
+		else
+			echo "Moving needed .elf files where Redream can see them..."
+			cp $REDREAM_DIR/releases/v*/redream.*.elf $REDREAM_DIR
+		fi
 	fi
 fi
 
-if [[ $run_after_install != "no-run" ]]; then
+if [[ $launch_args == *"no-run"* ]]; then
 	exec "$REDREAM_DIR/redream"
 fi
