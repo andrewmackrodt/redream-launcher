@@ -195,7 +195,7 @@ elif [[ "$PLATFORM" == "linux" ]]; then
 		if [[ $launch_args == *"system-mesa"* ]]; then
 			#exec "$REDREAM_DIR/redream"
 			echo "Using the system library over the bundled one..."
-			cp $REDREAM_DIR/releases/v*/redream.$REDREAM_ARM_TYPE.elf $REDREAM_DIR/redream
+			cp "$RELEASE_PATH/redream.$REDREAM_ARM_TYPE.elf" "$REDREAM_DIR/redream"
 		else
 			echo "Moving needed .elf files where Redream can see them..."
 			cp $REDREAM_DIR/releases/v*/redream.*.elf $REDREAM_DIR
