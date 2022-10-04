@@ -82,25 +82,41 @@ extract() {
 link_release() {
   echo -n "Creating hardlink to the latest release ... "
 
-  if [[ -f "$REDREAM_DIR/redream" ]] || [[ -f "$REDREAM_DIR/redream.exe" ]]; then
-    rm -f "$REDREAM_DIR/redream"
-  fi
-
   cd "$release_path/$(dirname "$APP_PATH")"
 
   if [[ "$PLATFORM" == "windows" ]]; then
+      if [[ -f "$REDREAM_DIR/redream.exe" ]]; then
+        rm -f "$REDREAM_DIR/redream.exe"
+      fi
+
     if cmd.exe /c "mklink /h "'"'$LINK_TARGET\\redream.exe'"'" redream.exe" >/dev/null; then
       echo "OK"
     else
-      cp "redream.exe" "$REDREAM_DIR/redream.exe"
       echo "ERROR"
+      cp "redream.exe" "$REDREAM_DIR/redream.exe"
     fi
   else
-    if echo "$(basename "$APP_PATH")" | cpio -p -al "$LINK_TARGET"; then
-      echo "OK"
-    else
-      cp "redream" "$REDREAM_DIR/redream"
-      echo "ERROR"
+    local src_inode
+    local rel_inode
+
+    if [[ -f "$REDREAM_DIR/redream" ]]; then
+      src_inode=$(stat -c '%d:%i' redream)
+      rel_inode=$(stat -c '%d:%i' "$REDREAM_DIR/redream")
+
+      if [[ "$src_inode" == "$rel_inode" ]]; then
+        echo "SKIP"
+      else
+        rm -f "$REDREAM_DIR/redream"
+      fi
+    fi
+
+    if [[ ! -f "$REDREAM_DIR/redream" ]]; then
+      if echo "$(basename "$APP_PATH")" | cpio -p -al "$LINK_TARGET" 2>/dev/null; then
+        echo "OK"
+      else
+        echo "ERROR"
+        cp "redream" "$REDREAM_DIR/redream"
+      fi
     fi
   fi
 
@@ -124,14 +140,17 @@ create_macos_application() {
 
 create_linux_desktop_launcher() {
   local shortcut_text
-  local shortcut_path
+  local env
+  if [[ "$(uname -r)" == *valve* ]]; then
+    env="MESA_LOADER_DRIVER_OVERRIDE=zink"
+  fi
   shortcut_text=$(cat <<EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=redream
 Icon=$REDREAM_DIR/redream.png
-Exec=$REDREAM_DIR/redream %f
+Exec=${env:+"/usr/bin/env $env "}$REDREAM_DIR/redream %f
 Categories=Game;Emulator;
 Terminal=false
 EOF
@@ -140,11 +159,11 @@ EOF
   if [[ -f ~/.local/share/applications/redream.desktop ]] \
       && [[ "$shortcut_text" == "$(cat ~/.local/share/applications/redream.desktop)" ]] \
   ; then
-    echo "SKIP ... EXISTS"
+    echo "SKIP -> EXISTS"
     return
   fi
   if [[ ! -d ~/.local/share/applications ]]; then
-    echo "ERR ... DIR NOT FOUND ~/.local/share/applications"
+    echo "ERR -> DIR NOT FOUND ~/.local/share/applications"
     return
   fi
   wget -qO "$REDREAM_DIR/redream.png" https://raw.githubusercontent.com/andrewmackrodt/redream-launcher/master/redream.png
@@ -182,10 +201,10 @@ update() {
   fi
 }
 
-if [[ $* != *"no-update"* ]]; then
+if [[ ! -t 0 ]] || [[ " $@ " == *" -u "* ]] || [[ " $@ " == *" --update "* ]]; then
   update
 fi
 
-if [[ $* != *"no-run"* ]]; then
+if [[ -t 0 ]] && [[ " $@ " != *" -N "* ]] && [[ " $@ " != *" --no-run "* ]]; then
   exec "$REDREAM_DIR/redream" "$@"
 fi
