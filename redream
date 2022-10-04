@@ -13,14 +13,36 @@ if uname | grep -q MSYS; then
   PLATFORM="windows"
   APP_PATH="redream"
   LINK_TARGET="..\.."
+  REDREAM_ARCH="x86_64"
 elif uname | grep -q Darwin; then
   PLATFORM="mac"
   APP_PATH="redream.app/Contents/MacOS/redream"
   LINK_TARGET="../../../../.."
+  REDREAM_ARCH="x86_64"
 else
   PLATFORM="linux"
   APP_PATH="redream"
   LINK_TARGET="../.."
+
+  case "$(uname -m)" in #https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
+    "x86_64" )
+      REDREAM_ARCH="x86_64"
+      ;;
+    "aarch64" | "aarch64_be" | "armv8l" )
+      REDREAM_ARCH="universal-raspberry"
+      REDREAM_ARM_TYPE="aarch64"
+      REDREAM_ARM_MESA_DIR="aarch64-linux-gnu"
+      ;;
+    "arm" | "armv7l" )
+      REDREAM_ARCH="universal-raspberry"
+      REDREAM_ARM_TYPE="aarch32"
+      REDREAM_ARM_MESA_DIR="arm-linux-gnueabihf"
+      ;;
+    *)
+      echo "ERROR not running on a supported architecture"
+      exit 1
+    ;;
+  esac
 fi
 
 get_latest_url() {
@@ -29,8 +51,8 @@ get_latest_url() {
   curl -Sso /tmp/redream-download.html "$REDREAM_BASE_URL/download"
 
   local links=$(
-    grep -E 'href="([^"]*redream.x86_64-'$PLATFORM'[^"]+)' /tmp/redream-download.html |
-      sed -E 's/.*href="([^"]*redream.x86_64-'$PLATFORM'[^"]+)".*/\1/g' |
+    grep -E 'href="([^"]*redream.'$REDREAM_ARCH'-'$PLATFORM'[^"]+)' /tmp/redream-download.html |
+      sed -E 's/.*href="([^"]*redream.'$REDREAM_ARCH'-'$PLATFORM'[^"]+)".*/\1/g' |
       uniq
   )
 
@@ -79,48 +101,76 @@ extract() {
   fi
 }
 
-link_release() {
-  echo -n "Creating hardlink to the latest release ... "
+cpio_hardlink() {
+  echo -n "Creating hardlink to $2 ... "
 
-  cd "$release_path/$(dirname "$APP_PATH")"
+  cd "$1/$(dirname "$APP_PATH")"
 
-  if [[ "$PLATFORM" == "windows" ]]; then
-      if [[ -f "$REDREAM_DIR/redream.exe" ]]; then
-        rm -f "$REDREAM_DIR/redream.exe"
-      fi
+  if [[ -f "$REDREAM_DIR/$1" ]]; then
+    local src_inode=$(stat -c '%d:%i' "$2")
+    local rel_inode=$(stat -c '%d:%i' "$REDREAM_DIR/$2")
 
-    if cmd.exe /c "mklink /h "'"'$LINK_TARGET\\redream.exe'"'" redream.exe" >/dev/null; then
+    if [[ "$src_inode" == "$rel_inode" ]]; then
+      echo "SKIP"
+    else
+      rm -f "$REDREAM_DIR/$2"
+    fi
+  fi
+
+  if [[ ! -f "$REDREAM_DIR/$2" ]]; then
+    if echo "$2" | cpio -p -al "$LINK_TARGET" 2>/dev/null; then
       echo "OK"
     else
-      echo "ERROR"
-      cp "redream.exe" "$REDREAM_DIR/redream.exe"
-    fi
-  else
-    local src_inode
-    local rel_inode
-
-    if [[ -f "$REDREAM_DIR/redream" ]]; then
-      src_inode=$(stat -c '%d:%i' redream)
-      rel_inode=$(stat -c '%d:%i' "$REDREAM_DIR/redream")
-
-      if [[ "$src_inode" == "$rel_inode" ]]; then
-        echo "SKIP"
-      else
-        rm -f "$REDREAM_DIR/redream"
-      fi
-    fi
-
-    if [[ ! -f "$REDREAM_DIR/redream" ]]; then
-      if echo "$(basename "$APP_PATH")" | cpio -p -al "$LINK_TARGET" 2>/dev/null; then
-        echo "OK"
-      else
-        echo "ERROR"
-        cp "redream" "$REDREAM_DIR/redream"
-      fi
+      echo "ERROR -> using copy"
+      cp "$2" "$REDREAM_DIR/$2"
     fi
   fi
 
   cd - >/dev/null
+}
+
+link_release() {
+  if [[ "$PLATFORM" == "windows" ]]; then
+    echo -n "Creating hardlink to redream.exe ... "
+
+    cd "$1/$(dirname "$APP_PATH")"
+
+    if [[ -f "$REDREAM_DIR/redream.exe" ]]; then
+      rm -f "$REDREAM_DIR/redream.exe"
+    fi
+
+    if cmd.exe /c "mklink /h "'"'$LINK_TARGET\\redream.exe'"'" redream.exe" >/dev/null; then
+      echo "OK"
+    else
+      echo "ERROR -> using copy"
+      cp "redream.exe" "$REDREAM_DIR/redream.exe"
+    fi
+
+    cd - >/dev/null
+  else
+    if [[ "$REDREAM_ARCH" == "universal-raspberry" ]]; then
+      cpio_hardlink "$1" "redream.$REDREAM_ARM_TYPE.elf"
+      cd "$REDREAM_DIR"
+      [[ ! -f "redream" ]] || rm -f "redream"
+      if [[ " $@ " == *" --system-mesa "* ]]; then
+        echo "Using system mesa"
+        ln -s "redream.$REDREAM_ARM_TYPE.elf" "redream"
+      else
+        echo "Using bundled mesa"
+        local release
+        release=$(echo "$1" | sed -E "s:^$REDREAM_DIR/::")
+        cat <<EOF >redream
+#!/usr/bin/env bash
+cd "\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd -P)"
+LIBGL_DRIVERS_PATH="$release/mesa/$REDREAM_ARM_MESA_DIR/dri" "./redream.$REDREAM_ARM_TYPE.elf" "\$@"
+EOF
+        chmod +x redream
+      fi
+      cd - >/dev/null
+    else
+      cpio_hardlink "$1" "redream"
+    fi
+  fi
 }
 
 create_macos_application() {
@@ -130,11 +180,11 @@ create_macos_application() {
     return
   fi
   mkdir -p ~/Applications/redream.app/Contents/{MacOS,Resources}
-  echo -e "#!/bin/sh\nexec $REDREAM_DIR/redream "$@ >~/Applications/redream.app/Contents/MacOS/redream
+  echo -e '#!/bin/sh\nexec "'"$REDREAM_DIR"'/redream" "$@"' >~/Applications/redream.app/Contents/MacOS/redream
   chmod +x ~/Applications/redream.app/Contents/MacOS/redream
   chmod +x ~/Applications/redream.app
-  cp "$release_path/redream.app/Contents/Resources/icon.icns" ~/Applications/redream.app/Contents/Resources
-  cp "$release_path/redream.app/Contents/Info.plist" ~/Applications/redream.app/Contents
+  cp "$1/redream.app/Contents/Resources/icon.icns" ~/Applications/redream.app/Contents/Resources
+  cp "$1/redream.app/Contents/Info.plist" ~/Applications/redream.app/Contents
   echo "OK"
 }
 
@@ -192,10 +242,10 @@ update() {
   fi
 
   # create a hardlink to the latest release
-  link_release
+  link_release "$release_path"
 
   if [[ "$PLATFORM" == "mac" ]]; then
-    create_macos_application
+    create_macos_application "$release_path"
   elif [[ "$PLATFORM" == "linux" ]]; then
     create_linux_desktop_launcher
   fi
