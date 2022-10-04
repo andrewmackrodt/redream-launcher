@@ -7,22 +7,25 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
   . "$SCRIPT_DIR/.env"
 fi
 
-REDREAM_DIR=${REDREAM_DIR:-$HOME/Applications/redream}
-
 if uname | grep -q MSYS; then
-  PLATFORM="windows"
-  APP_PATH="redream"
+  APP_EXTRACTED_PATH="redream"
   LINK_TARGET="..\.."
+  PLATFORM="windows"
   REDREAM_ARCH="x86_64"
+  REDREAM_DIR=${REDREAM_DIR:-$HOME/Applications/redream}
 elif uname | grep -q Darwin; then
-  PLATFORM="mac"
-  APP_PATH="redream.app/Contents/MacOS/redream"
+  APP_EXTRACTED_PATH="redream.app/Contents/MacOS/redream"
   LINK_TARGET="../../../../.."
-  REDREAM_ARCH="x86_64"
+  PLATFORM="mac"
+  REDREAM_ARCH="universal"
+  REDREAM_DIR=${REDREAM_DIR:-$HOME/Library/Application Support/redream}
+  STAT_FMT="-f"
 else
-  PLATFORM="linux"
-  APP_PATH="redream"
+  APP_EXTRACTED_PATH="redream"
   LINK_TARGET="../.."
+  PLATFORM="linux"
+  REDREAM_DIR=${REDREAM_DIR:-$HOME/Applications/redream}
+  STAT_FMT="-c"
 
   case "$(uname -m)" in #https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
     "x86_64" )
@@ -39,7 +42,7 @@ else
       REDREAM_ARM_MESA_DIR="arm-linux-gnueabihf"
       ;;
     *)
-      echo "ERROR not running on a supported architecture"
+      echo "ERROR not running on a supported architecture" >&2
       exit 1
     ;;
   esac
@@ -104,11 +107,11 @@ extract() {
 cpio_hardlink() {
   echo -n "Creating hardlink to $2 ... "
 
-  cd "$1/$(dirname "$APP_PATH")"
+  cd "$1/$(dirname "$APP_EXTRACTED_PATH")"
 
-  if [[ -f "$REDREAM_DIR/$1" ]]; then
-    local src_inode=$(stat -c '%d:%i' "$2")
-    local rel_inode=$(stat -c '%d:%i' "$REDREAM_DIR/$2")
+  if [[ -f "$REDREAM_DIR/$2" ]]; then
+    local src_inode=$(stat $STAT_FMT '%d:%i' "$2")
+    local rel_inode=$(stat $STAT_FMT '%d:%i' "$REDREAM_DIR/$2")
 
     if [[ "$src_inode" == "$rel_inode" ]]; then
       echo "SKIP"
@@ -133,7 +136,7 @@ link_release() {
   if [[ "$PLATFORM" == "windows" ]]; then
     echo -n "Creating hardlink to redream.exe ... "
 
-    cd "$1/$(dirname "$APP_PATH")"
+    cd "$1/$(dirname "$APP_EXTRACTED_PATH")"
 
     if [[ -f "$REDREAM_DIR/redream.exe" ]]; then
       rm -f "$REDREAM_DIR/redream.exe"
@@ -236,8 +239,8 @@ update() {
   extract "$download_path" "$release_path"
 
   # check for existence of redream binary
-  if [[ ! -f "$release_path/$APP_PATH" ]]; then
-    echo "ERROR could not locate redream executable in release"
+  if [[ ! -f "$release_path/$APP_EXTRACTED_PATH" ]]; then
+    echo "ERROR could not locate redream executable in release" >&2
     exit 1
   fi
 
@@ -251,10 +254,36 @@ update() {
   fi
 }
 
-if [[ ! -t 0 ]] || [[ " $@ " == *" -u "* ]] || [[ " $@ " == *" --update "* ]]; then
+declare -a redream_args=()
+
+cmd_no_run="false"
+cmd_no_update="false"
+cmd_system_mesa="false"
+
+for arg in "$@"; do
+  case "$arg" in
+    -N | --no-run )
+      cmd_no_run="true"
+      ;;
+    -U | --no-update )
+      if [[ "$REDREAM_ARCH" == "universal-raspberry" ]]; then
+        echo "WARN --no-update is not supported for arm devices" >&2
+      else
+        cmd_no_update="true"
+      fi
+      ;;
+    --system-mesa )
+      cmd_system_mesa="true"
+      ;;
+    * )
+      redream_args+=( "$arg" )
+  esac
+done
+
+if [[ "$cmd_no_update" == "false" ]]; then
   update
 fi
 
-if [[ -t 0 ]] && [[ " $@ " != *" -N "* ]] && [[ " $@ " != *" --no-run "* ]]; then
-  exec "$REDREAM_DIR/redream" "$@"
+if [[ "$cmd_no_run" == "false" ]]; then
+  exec "$REDREAM_DIR/redream" "${redream_args[@]}"
 fi

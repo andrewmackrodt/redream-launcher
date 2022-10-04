@@ -23,8 +23,8 @@ curl -sSL https://raw.githubusercontent.com/andrewmackrodt/redream-launcher/main
 
 Supported arguments:
 
-| Argument         | Description                                                  |
-|------------------|--------------------------------------------------------------|
-| `-u`, `--update` | Update to latest version of redream                          |
-| `-N`, `--no-run` | Do not run redream at the end of script exection             |
-| `--system-mesa`  | Raspberry Pi users only, don't use the redream provided mesa |
+| Argument            | Description                                                                              |
+|---------------------|------------------------------------------------------------------------------------------|
+| `-U`, `--no-update` | Skip updating to the latest version of redream (note: this has no effect on arm devices) |
+| `-N`, `--no-run`    | Do not run redream at the end of script exection                                         |
+| `--system-mesa`     | Raspberry Pi users only, don't use the redream provided mesa                             |
