@@ -1,6 +1,6 @@
 # redream-launcher
 
-*nix script to install the latest redream version to `~/redream`. The script
+Bash script to install the latest redream before each application start. The script
 can be run on demand to update to the latest version and will preserve existing
 configurations, saves etc.
 
