@@ -48,6 +48,8 @@ else
   esac
 fi
 
+RELEASES_DIR="$REDREAM_DIR/releases"
+
 get_latest_url() {
   local REDREAM_BASE_URL="https://redream.io"
 
@@ -105,7 +107,10 @@ extract() {
 }
 
 cpio_hardlink() {
-  echo -n "Creating hardlink to $2 ... "
+  local release
+  release=$(basename $1)
+
+  echo -n "Creating hardlink to $2 [$release] ... "
 
   cd "$1/$(dirname "$APP_EXTRACTED_PATH")"
 
@@ -199,7 +204,7 @@ create_linux_desktop_launcher() {
   fi
   shortcut_text=$(cat <<EOF
 [Desktop Entry]
-Version=1.0
+release=1.0
 Type=Application
 Name=redream
 Icon=$REDREAM_DIR/redream.png
@@ -212,7 +217,7 @@ EOF
   if [[ -f ~/.local/share/applications/redream.desktop ]] \
       && [[ "$shortcut_text" == "$(cat ~/.local/share/applications/redream.desktop)" ]] \
   ; then
-    echo "SKIP -> EXISTS"
+    echo "SKIP"
     return
   fi
   if [[ ! -d ~/.local/share/applications ]]; then
@@ -224,23 +229,12 @@ EOF
   echo "OK"
 }
 
-update() {
-  local latest_url
-  local download_path
-  local release_path
-
-  # get the latest release
-  latest_url=$(get_latest_url)
-  download_path="$REDREAM_DIR/releases/$(basename "$latest_url")"
-  release_path="$REDREAM_DIR/releases/$(basename "$latest_url" | sed -E 's/.+-(v.+)\.(tar\.gz|zip)/\1/')"
-
-  # download and extract
-  download "$latest_url" "$download_path"
-  extract "$download_path" "$release_path"
+set_release() {
+  local release_path="$RELEASES_DIR/$1"
 
   # check for existence of redream binary
   if [[ ! -f "$release_path/$APP_EXTRACTED_PATH" ]]; then
-    echo "ERROR could not locate redream executable in release" >&2
+    echo "ERROR could not locate redream executable for release $1" >&2
     exit 1
   fi
 
@@ -254,14 +248,61 @@ update() {
   fi
 }
 
+update() {
+  local latest_url
+  local filename
+  local download_path
+  local release
+  local release_path
+
+  # detect the latest release
+  latest_url=$(get_latest_url)
+  filename=$(basename "$latest_url")
+  download_path="$RELEASES_DIR/$filename"
+  release=$(echo "$filename" | sed -E 's/.+-(v.+)\.(tar\.gz|zip)/\1/')
+  release_path="$RELEASES_DIR/$release"
+
+  # download and extract
+  download "$latest_url" "$download_path"
+  extract "$download_path" "$release_path"
+
+  # set release
+  set_release "$release"
+}
+
+print_help() {
+  echo -e "Version manager for redream.
+
+The latest release will be installed unless contradictory options set.
+
+\033[1mUSAGE\033[0m
+  $(basename "${BASH_SOURCE[0]}") [options...] [rom]
+
+\033[1mOPTIONS\033[0m
+  -l, --list              List installed versions and exit
+  -h, --help              Display help text and exit
+  -N, --no-run            Skip launching redream
+  -U, --no-update         Skip updating to the latest release
+  -s, --switch <release>  Switch to a previously downloaded release before launch
+  --system-mesa           [ARM/Pi] Use system provided mesa"
+}
+
 declare -a redream_args=()
 
 cmd_no_run="false"
 cmd_no_update="false"
 cmd_system_mesa="false"
 
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h | --help )
+        print_help
+        exit 0
+      ;;
+    -l | --list )
+      find "$RELEASES_DIR" -xdev -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort -rV
+      exit 0
+      ;;
     -N | --no-run )
       cmd_no_run="true"
       ;;
@@ -272,12 +313,22 @@ for arg in "$@"; do
         cmd_no_update="true"
       fi
       ;;
+    -s | --switch )
+      shift
+      if [[ "${1:-}" == "" ]]; then
+        echo "ERROR" >&2
+        exit 1
+      fi
+      cmd_no_update="true"
+      set_release "$1"
+      ;;
     --system-mesa )
       cmd_system_mesa="true"
       ;;
     * )
       redream_args+=( "$arg" )
   esac
+  shift
 done
 
 if [[ "$cmd_no_update" == "false" ]]; then
