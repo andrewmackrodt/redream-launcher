@@ -229,6 +229,10 @@ EOF
   echo "OK"
 }
 
+list_local_releases() {
+  find "$RELEASES_DIR" -xdev -mindepth 1 -maxdepth 1 -type d -execdir basename -a {} + | sort -rV
+}
+
 set_release() {
   local release_path="$RELEASES_DIR/$1"
 
@@ -245,6 +249,32 @@ set_release() {
     create_macos_application "$release_path"
   elif [[ "$PLATFORM" == "linux" ]]; then
     create_linux_desktop_launcher
+  fi
+}
+
+set_release_interactive() {
+  local releases
+  declare -a releases=()
+  local i=1
+  for release in $(list_local_releases); do
+    releases+=( "$release" )
+  done
+  clear
+  echo -e "\033[1mREDREAM RELEASE SELECTOR\033[0m"
+  for release in "${releases[@]}"; do
+    echo -e "  $i ) $release"
+    i=$((i + 1))
+  done
+  local release
+  echo ""
+  read -p "Enter release: " release
+  if [[ "${release}" != "" ]]; then
+    if [[ "$release" =~ ^[0-9]+$ ]] && [[ $release -gt 0 ]] && [[ $release -le ${#releases[@]} ]]; then
+      release=${releases[$(($release - 1))]}
+    fi
+    set_release "$release"
+  else
+    echo "INFO skipping setting release due to empty string" >&2
   fi
 }
 
@@ -283,8 +313,8 @@ The latest release will be installed unless contradictory options set.
   -h, --help              Display help text and exit
   -N, --no-run            Skip launching redream
   -U, --no-update         Skip updating to the latest release
-  -s, --switch <release>  Switch to a previously downloaded release before launch
-  --system-mesa           [ARM/Pi] Use system provided mesa"
+  -s, --switch [release]  Use a previously downloaded release (interactive if no value set)
+  --system-mesa           [ARM] Use system provided mesa"
 }
 
 declare -a redream_args=()
@@ -300,7 +330,7 @@ while [[ $# -gt 0 ]]; do
         exit 0
       ;;
     -l | --list )
-      find "$RELEASES_DIR" -xdev -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort -rV
+      list_local_releases
       exit 0
       ;;
     -N | --no-run )
@@ -314,13 +344,13 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     -s | --switch )
-      shift
-      if [[ "${1:-}" == "" ]]; then
-        echo "ERROR" >&2
-        exit 1
-      fi
       cmd_no_update="true"
-      set_release "$1"
+      if [[ "${2:-}" == "" ]] || [[ "${2:-}" == -* ]]; then
+        set_release_interactive
+      else
+        shift
+        set_release "$1"
+      fi
       ;;
     --system-mesa )
       cmd_system_mesa="true"
