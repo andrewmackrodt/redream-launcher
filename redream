@@ -9,12 +9,14 @@ fi
 
 if uname | grep -q MSYS; then
   APP_EXTRACTED_PATH="redream"
+  ENV=""
   LINK_TARGET="..\.."
   PLATFORM="windows"
   REDREAM_ARCH="x86_64"
   REDREAM_DIR=${REDREAM_DIR:-$HOME/Applications/redream}
 elif uname | grep -q Darwin; then
   APP_EXTRACTED_PATH="redream.app/Contents/MacOS/redream"
+  ENV=""
   LINK_TARGET="../../../../.."
   PLATFORM="mac"
   REDREAM_ARCH="universal"
@@ -22,10 +24,15 @@ elif uname | grep -q Darwin; then
   STAT_FMT="-f"
 else
   APP_EXTRACTED_PATH="redream"
+  ENV=""
   LINK_TARGET="../.."
   PLATFORM="linux"
   REDREAM_DIR=${REDREAM_DIR:-$HOME/Applications/redream}
   STAT_FMT="-c"
+
+  if [[ "$(uname -r)" == *valve* ]]; then
+    ENV="${ENV:+"$ENV "}MESA_LOADER_DRIVER_OVERRIDE=zink"
+  fi
 
   case "$(uname -m)" in #https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
     "x86_64" )
@@ -205,17 +212,13 @@ create_macos_application() {
 
 create_linux_desktop_launcher() {
   local shortcut_text
-  local env
-  if [[ "$(uname -r)" == *valve* ]]; then
-    env="MESA_LOADER_DRIVER_OVERRIDE=zink"
-  fi
   shortcut_text=$(cat <<EOF
 [Desktop Entry]
 release=1.0
 Type=Application
 Name=redream
 Icon=$REDREAM_DIR/redream.png
-Exec=${env:+"/usr/bin/env $env "}$REDREAM_DIR/redream %f
+Exec=${ENV:+"/usr/bin/env $ENV "}$REDREAM_DIR/redream %f
 Categories=Game;Emulator;
 Terminal=false
 EOF
@@ -323,10 +326,7 @@ gui_launch() {
 
   case "$option" in
     *redream* )
-      if [[ ! -f "$REDREAM_DIR/redream" ]]; then
-        update "true"
-      fi
-      exec "$REDREAM_DIR/redream" "${redream_args[@]}"
+      start "${redream_args[@]}"
       ;;
     *pdate* )
       update "true"
@@ -347,6 +347,18 @@ gui_launch() {
     * )
       exit 0
   esac
+}
+
+start() {
+  if [[ ! -f "$REDREAM_DIR/redream" ]]; then
+    update
+  fi
+
+  for env in $ENV; do
+    export "$env"
+  done
+
+  exec "$REDREAM_DIR/redream" "$@"
 }
 
 print_help() {
@@ -410,7 +422,7 @@ while [[ $# -gt 0 ]]; do
       cmd_system_mesa="true"
       ;;
     * )
-      redream_args+=( "$arg" )
+      redream_args+=( "$1" )
   esac
   shift
 done
@@ -421,10 +433,7 @@ if [[ "$is_gui_launch" == "false" ]]; then
   fi
 
   if [[ "$cmd_no_run" == "false" ]]; then
-    if [[ ! -f "$REDREAM_DIR/redream" ]]; then
-      update
-    fi
-    exec "$REDREAM_DIR/redream" "${redream_args[@]}"
+    start "${redream_args[@]}"
   fi
 else
   gui_launch "${redream_args[@]}"
