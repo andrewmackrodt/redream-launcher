@@ -73,10 +73,17 @@ download() {
     echo "SKIP"
   else
     mkdir -p "$(dirname "$2")"
-    if curl -Sso "$2" "$1"; then
+    if [[ "${3:-false}" == "false" ]]; then
+      curl --fail -Sso "$2" "$1"
+    else
+      curl --fail -o "$2" "$1" 2>&1 \
+        | stdbuf -oL tr '\r' '\n' \
+        | sed -u 's/^ *\([0-9][0-9]*\).*\( [0-9].*$\)/\1\n#Download Speed\:\2/' \
+        | zenity --progress --title "Downloading $(basename "$2")" --auto-close --time-remaining
+    fi
+    if [[ -f "$2" ]]; then
       echo "OK"
     else
-      rm -f "$2"
       echo "ERROR"
     fi
   fi
@@ -293,11 +300,53 @@ update() {
   release_path="$RELEASES_DIR/$release"
 
   # download and extract
-  download "$latest_url" "$download_path"
+  download "$latest_url" "$download_path" "${1:-false}"
   extract "$download_path" "$release_path"
 
   # set release
   set_release "$release"
+}
+
+gui_launch() {
+  local items
+  declare -a items=()
+  items+=( "Start redream" )
+  items+=( "Update" )
+  items+=( "Change version" )
+
+  local option
+  option=$(zenity --list --hide-header \
+    --title="redream launcher" \
+    --text="Startup options:" \
+    --column="Option" "${items[@]}" \
+  )
+
+  case "$option" in
+    *redream* )
+      if [[ ! -f "$REDREAM_DIR/redream" ]]; then
+        update "true"
+      fi
+      exec "$REDREAM_DIR/redream" "${redream_args[@]}"
+      ;;
+    *pdate* )
+      update "true"
+      gui_launch
+      ;;
+    *version* )
+      local release
+      release=$(zenity --list --hide-header \
+        --title="redream launcher" \
+        --text="Release selection:" \
+        --column="Release" $(list_local_releases) \
+      )
+      if [[ "$release" != "" ]]; then
+        set_release "$release"
+      fi
+      gui_launch
+      ;;
+    * )
+      exit 0
+  esac
 }
 
 print_help() {
@@ -309,6 +358,7 @@ The latest release will be installed unless contradictory options set.
   $(basename "${BASH_SOURCE[0]}") [options...] [rom]
 
 \033[1mOPTIONS\033[0m
+  -g, --gui               Restart this application in GUI mode (requires zenity)
   -l, --list              List installed versions and exit
   -h, --help              Display help text and exit
   -N, --no-run            Skip launching redream
@@ -319,12 +369,16 @@ The latest release will be installed unless contradictory options set.
 
 declare -a redream_args=()
 
+is_gui_launch="false"
 cmd_no_run="false"
 cmd_no_update="false"
 cmd_system_mesa="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -g | --gui )
+      is_gui_launch="true"
+      ;;
     -h | --help )
         print_help
         exit 0
@@ -361,10 +415,17 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ "$cmd_no_update" == "false" ]]; then
-  update
-fi
+if [[ "$is_gui_launch" == "false" ]]; then
+  if [[ "$cmd_no_update" == "false" ]]; then
+    update
+  fi
 
-if [[ "$cmd_no_run" == "false" ]]; then
-  exec "$REDREAM_DIR/redream" "${redream_args[@]}"
+  if [[ "$cmd_no_run" == "false" ]]; then
+    if [[ ! -f "$REDREAM_DIR/redream" ]]; then
+      update
+    fi
+    exec "$REDREAM_DIR/redream" "${redream_args[@]}"
+  fi
+else
+  gui_launch "${redream_args[@]}"
 fi
