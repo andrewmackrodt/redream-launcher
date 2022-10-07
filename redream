@@ -315,6 +315,7 @@ gui_launch() {
   declare -a items=()
   items+=( "Start redream" )
   items+=( "Update" )
+  [[ ! -f "$SCRIPT_DIR/.git/HEAD" ]] || items+=( "Git Pull" )
   items+=( "Change version" )
 
   local option
@@ -324,11 +325,11 @@ gui_launch() {
     --column="Option" "${items[@]}" \
   )
 
-  case "$option" in
+  case "$(echo "$option" | awk '{ print tolower($0); }')" in
     *redream* )
       start "${redream_args[@]}"
       ;;
-    *pdate* )
+    *update* )
       update "true"
       gui_launch
       ;;
@@ -343,6 +344,10 @@ gui_launch() {
         set_release "$release"
       fi
       gui_launch
+      ;;
+    *git* )
+      git pull
+      exec "$0" --gui "${redream_args[@]}"
       ;;
     * )
       exit 0
@@ -375,6 +380,7 @@ The latest release will be installed unless contradictory options set.
   -h, --help              Display help text and exit
   -N, --no-run            Skip launching redream
   -U, --no-update         Skip updating to the latest release
+  -p, --pull              Run git pull to update this script and exit
   -s, --switch [release]  Use a previously downloaded release (interactive if no value set)
   --system-mesa           [ARM] Use system provided mesa"
 }
@@ -408,6 +414,10 @@ while [[ $# -gt 0 ]]; do
       else
         cmd_no_update="true"
       fi
+      ;;
+    -p | --pull )
+      git pull
+      exit $?
       ;;
     -s | --switch )
       cmd_no_update="true"
