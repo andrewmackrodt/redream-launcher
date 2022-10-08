@@ -355,6 +355,9 @@ gui_launch() {
 }
 
 start() {
+  local plugins
+  plugins=$(find "$SCRIPT_DIR/plugins" -xdev -mindepth 1 -maxdepth 1 -type f | sort -V)
+
   if [[ ! -f "$REDREAM_DIR/redream" ]]; then
     update
   fi
@@ -363,7 +366,20 @@ start() {
     export "$env"
   done
 
-  exec "$REDREAM_DIR/redream" "$@"
+  export REDREAM_DIR
+
+  for plugin in $plugins; do
+    "$plugin" start "$@"
+  done
+
+  "$REDREAM_DIR/redream" "$@"
+  exit_code=$?
+
+  for plugin in $plugins; do
+    "$plugin" stop "$@"
+  done
+
+  exit $exit_code
 }
 
 print_help() {
