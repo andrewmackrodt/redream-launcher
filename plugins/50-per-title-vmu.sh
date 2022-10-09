@@ -160,12 +160,20 @@ function restore_global_vmus() {
 
 command="$1"
 shift
+rompath=""
+
+for arg in "$@"; do
+  if [[ ! "$arg" == -* ]] && [[ -f "$arg" ]]; then
+    rompath=$arg
+    break
+  fi
+done
 
 case "$command" in
   start )
     create_global_vmus
 
-    sanitized_name=$(basename "$1" \
+    sanitized_name=$(basename "$rompath" \
       | sed -E 's/\.[A-Za-z0-9]+$//' \
       | sed -E 's/\b(dis[ck]|cd) ?[0-9]+( of [0-9]+)?//ig' \
       | sed -E 's/ ?[\(\[].+//' \

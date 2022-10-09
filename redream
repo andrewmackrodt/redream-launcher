@@ -3,7 +3,7 @@
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 # source environment file if exists
-if [[ -f "$SCRIPT_DIR/.env" ]]; then
+if [[ "${BASH_SOURCE[*]}" != "" ]] && [[ -f "$SCRIPT_DIR/.env" ]]; then
   . "$SCRIPT_DIR/.env"
 fi
 
@@ -315,7 +315,9 @@ gui_launch() {
   declare -a items=()
   items+=( "Start redream" )
   items+=( "Update" )
-  [[ ! -f "$SCRIPT_DIR/.git/HEAD" ]] || items+=( "Git Pull" )
+  if [[ "${BASH_SOURCE[*]}" != "" ]] && [[ -f "$SCRIPT_DIR/.git/HEAD" ]]; then
+    items+=( "Git Pull" )
+  fi
   items+=( "Change version" )
 
   local option
@@ -356,14 +358,17 @@ gui_launch() {
 
 start() {
   local plugins
-  plugins=$(find "$SCRIPT_DIR/plugins" -xdev -mindepth 1 -maxdepth 1 -type f | sort -V)
+
+  if [[ "${BASH_SOURCE[*]}" != "" ]]; then
+    plugins=$(find "$SCRIPT_DIR/plugins" -xdev -mindepth 1 -maxdepth 1 -type f | sort -V)
+  fi
 
   if [[ ! -f "$REDREAM_DIR/redream" ]]; then
     update
   fi
 
   for env in $ENV; do
-    export "$env"
+    export "${env?}"
   done
 
   export REDREAM_DIR
