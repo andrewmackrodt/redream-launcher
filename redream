@@ -1,9 +1,15 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+SCRIPT_PATH=""
+SCRIPT_DIR=""
+
+if [[ "${BASH_SOURCE[*]}" != "" ]]; then
+  SCRIPT_PATH=$(readlink -f "$0")
+  SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
+fi
 
 # source environment file if exists
-if [[ "${BASH_SOURCE[*]}" != "" ]] && [[ -f "$SCRIPT_DIR/.env" ]]; then
+if [[ "$SCRIPT_DIR" != "" ]] && [[ -f "$SCRIPT_DIR/.env" ]]; then
   . "$SCRIPT_DIR/.env"
 fi
 
@@ -212,7 +218,21 @@ create_macos_application() {
 
 create_linux_desktop_launcher() {
   local shortcut_text
-  shortcut_text=$(cat <<EOF
+
+  if [[ "$SCRIPT_DIR" != "" ]]; then
+    shortcut_text=$(cat <<EOF
+[Desktop Entry]
+release=1.0
+Type=Application
+Name=redream
+Icon=$REDREAM_DIR/redream.png
+Exec=$SCRIPT_PATH --gui %f
+Categories=Game;Emulator;
+Terminal=false
+EOF
+)
+  else
+    shortcut_text=$(cat <<EOF
 [Desktop Entry]
 release=1.0
 Type=Application
@@ -223,6 +243,8 @@ Categories=Game;Emulator;
 Terminal=false
 EOF
 )
+  fi
+
   echo -n "Creating linux redream.desktop in ~/.local/share/applications/redream.desktop ... "
   if [[ -f ~/.local/share/applications/redream.desktop ]] \
       && [[ "$shortcut_text" == "$(cat ~/.local/share/applications/redream.desktop)" ]] \
@@ -312,26 +334,34 @@ update() {
 
 gui_launch() {
   local items
+  local releases
+
+  releases=$(list_local_releases)
+
   declare -a items=()
   items+=( "Start redream" )
   items+=( "Update" )
-  if [[ "${BASH_SOURCE[*]}" != "" ]] && [[ -f "$SCRIPT_DIR/.git/HEAD" ]]; then
-    items+=( "Git Pull" )
+
+  if [[ "$SCRIPT_DIR" != "" ]] && [[ -f "$SCRIPT_DIR/.git/HEAD" ]]; then
+    items+=( "Update launcher" )
   fi
-  items+=( "Change version" )
+
+  if [[ $(echo "$releases" | wc -l) -gt 1 ]]; then
+    items+=( "Change version" )
+  fi
 
   local option
   option=$(zenity --list --hide-header \
     --title="redream launcher" \
-    --text="Startup options:" \
+    --text="Options:" \
     --column="Option" "${items[@]}" \
   )
 
   case "$(echo "$option" | awk '{ print tolower($0); }')" in
-    *redream* )
+    *start* )
       start "${redream_args[@]}"
       ;;
-    *update* )
+    update )
       update "true"
       gui_launch
       ;;
@@ -340,14 +370,14 @@ gui_launch() {
       release=$(zenity --list --hide-header \
         --title="redream launcher" \
         --text="Release selection:" \
-        --column="Release" $(list_local_releases) \
+        --column="Release" $releases \
       )
       if [[ "$release" != "" ]]; then
         set_release "$release"
       fi
       gui_launch
       ;;
-    *git* )
+    *launcher* )
       git pull
       exec "$0" --gui "${redream_args[@]}"
       ;;
@@ -359,7 +389,7 @@ gui_launch() {
 start() {
   local plugins
 
-  if [[ "${BASH_SOURCE[*]}" != "" ]]; then
+  if [[ "$SCRIPT_DIR" != "" ]]; then
     plugins=$(find "$SCRIPT_DIR/plugins" -xdev -mindepth 1 -maxdepth 1 -type f | sort -V)
   fi
 
