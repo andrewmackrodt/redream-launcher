@@ -332,6 +332,40 @@ update() {
   set_release "$release"
 }
 
+toggle_plugins() {
+  local toggle_table
+  local plugin
+
+  declare -a toggle_table=()
+
+  for plugin in $(find "$SCRIPT_DIR/plugins" -xdev -mindepth 1 -maxdepth 1 -type f -execdir basename -a {} + | sort -V); do
+    toggle_table+=( "$plugin" )
+    if [[ -L "$SCRIPT_DIR/plugins/enabled/$plugin" ]]; then
+      toggle_table+=( "enabled" )
+    else
+      toggle_table+=( "disabled" )
+    fi
+  done
+
+  plugin=$(zenity --list \
+    --title="redream launcher" \
+    --text="Toggle Plugin:" \
+    --column="Plugin" --column="Status" "${toggle_table[@]}" \
+  )
+
+  if [[ "$plugin" == "" ]]; then
+    return
+  fi
+
+  if [[ -L "$SCRIPT_DIR/plugins/enabled/$plugin" ]]; then
+    rm "$SCRIPT_DIR/plugins/enabled/$plugin"
+  else
+    ln -s "../$plugin" "$SCRIPT_DIR/plugins/enabled/$plugin"
+  fi
+
+  toggle_plugins
+}
+
 gui_launch() {
   local items
   local releases
@@ -341,6 +375,7 @@ gui_launch() {
   declare -a items=()
   items+=( "Start redream" )
   items+=( "Update" )
+  items+=( "Manage plugins" )
 
   if [[ "$SCRIPT_DIR" != "" ]] && [[ -f "$SCRIPT_DIR/.git/HEAD" ]]; then
     items+=( "Update launcher" )
@@ -365,6 +400,14 @@ gui_launch() {
       update "true"
       gui_launch
       ;;
+    *launcher* )
+      git pull
+      exec "$0" --gui "${redream_args[@]}"
+      ;;
+    *plugin* )
+      toggle_plugins
+      gui_launch
+      ;;
     *version* )
       local release
       release=$(zenity --list --hide-header \
@@ -377,10 +420,6 @@ gui_launch() {
       fi
       gui_launch
       ;;
-    *launcher* )
-      git pull
-      exec "$0" --gui "${redream_args[@]}"
-      ;;
     * )
       exit 0
   esac
@@ -390,7 +429,7 @@ start() {
   local plugins
 
   if [[ "$SCRIPT_DIR" != "" ]]; then
-    plugins=$(find "$SCRIPT_DIR/plugins" -xdev -mindepth 1 -maxdepth 1 -type f | sort -V)
+    plugins=$(find "$SCRIPT_DIR/plugins/enabled" -xdev -mindepth 1 -maxdepth 1 -type l | sort -V)
   fi
 
   if [[ ! -f "$REDREAM_DIR/redream" ]]; then
