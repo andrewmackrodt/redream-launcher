@@ -401,7 +401,9 @@ gui_launch() {
       gui_launch
       ;;
     *launcher* )
+      cd "$SCRIPT_DIR"
       git pull
+      cd - >/dev/null
       exec "$0" --gui "${redream_args[@]}"
       ;;
     *plugin* )
@@ -506,8 +508,11 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     -p | --pull )
+      cd "$SCRIPT_DIR"
       git pull
-      exit $?
+      exit_code=$?
+      cd - >/dev/null
+      exit $exit_code
       ;;
     -s | --switch )
       cmd_no_update="true"
