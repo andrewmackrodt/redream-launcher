@@ -36,8 +36,14 @@ else
   REDREAM_DIR=${REDREAM_DIR:-$HOME/Applications/redream}
   STAT_FMT="-c"
 
+  # steam deck amd driver workaround for mesa < 22.2.0
   if [[ "$(uname -r)" == *valve* ]]; then
-    ENV="${ENV:+"$ENV "}MESA_LOADER_DRIVER_OVERRIDE=zink"
+    __MESA_VERSION=$(pacman -Q mesa | awk '{ print $2 }' | cut -d'.' -f1-2)
+    __MESA_VERSION_CHECK=$(echo -e "22.2\n$__MESA_VERSION" | sort -V | tail -n1)
+    if [[ "$__MESA_VERSION" != "$__MESA_VERSION_CHECK" ]]; then
+      ENV="${ENV:+"$ENV "}MESA_LOADER_DRIVER_OVERRIDE=zink"
+    fi
+    unset __MESA_VERSION __MESA_VERSION_CHECK
   fi
 
   case "$(uname -m)" in #https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
