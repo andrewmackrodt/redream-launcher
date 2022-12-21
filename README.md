@@ -7,8 +7,9 @@ be created so that redream can be started via spotlight. A .desktop file should
 be created for Linux users as long as `~/.local/share/applications` exists.
 
 > **Steam Deck Note** `MESA_LOADER_DRIVER_OVERRIDE=zink` is added to the
-> application shortcut to workaround AMD driver glitches. Steam Deck users
-> should set `Vertical sync` to `off` and `Polygon sort accuracy` to `per-strip`
+> application shortcut if Mesa < 22.2.0 is detected. This is to work around AMD
+> driver issues. If your version Mesa is lower than 22.2.0, you will need to
+> set `Vertical sync` to `off` and `Polygon sort accuracy` to `per-strip`
 > from within redream to prevent other glitches. `redream.desktop` can then
 > manually be added within Steam to support launching in Gaming Mode.
 > 
