@@ -72,7 +72,9 @@ RELEASES_DIR="$REDREAM_DIR/releases"
 get_latest_url() {
   local REDREAM_BASE_URL="https://redream.io"
 
-  curl -Sso /tmp/redream-download.html "$REDREAM_BASE_URL/download"
+  if ! curl -Sso /tmp/redream-download.html "$REDREAM_BASE_URL/download"; then
+    return
+  fi
 
   local links=$(
     grep -E 'href="([^"]*redream.'$REDREAM_ARCH'-'$PLATFORM'[^"]+)' /tmp/redream-download.html |
@@ -325,6 +327,9 @@ update() {
 
   # detect the latest release
   latest_url=$(get_latest_url)
+  if [[ "$latest_url" == "" ]]; then
+    return
+  fi
   filename=$(basename "$latest_url")
   download_path="$RELEASES_DIR/$filename"
   release=$(echo "$filename" | sed -E 's/.+-(v.+)\.(tar\.gz|zip)/\1/')
